@@ -1,0 +1,117 @@
+PA2 Write-up
+
+1. onebitParity
+xor returns 1 if there is an odd number of 1's. If there is an odd number of 1's in a 32-bit integer, there will be an odd number of 0's. So using xor with every bit of the integer as input will produce the desired result. By shifting x right 16, 8, 4, 2, 1 time and xor'ing with the current x, we obtain xor of all the 32 bits in the LSB. How this works:
+
+(i) after shift 16
+Lower 16 bits each contain xor of 2 bits
+(ii) after shift 8
+Lower 8 bits each contain xor of 4 bits
+(iii) after shift 4
+Lower 4 bits each contain xor of 8 bits
+(iv) after shift 2
+Lower 2 bits each contain xor of 16 bits
+(v) after shift 1
+Lowest bit (LSB) contains xor of 32 bits
+
+Returning (x & 1) will return the LSB, the desired result.
+
+
+2. checkSubstraction
+If the sign of the two integers are the same, there cannot be overflow. If they are the same, x-y will overflow if x and x-y have different signs (MSB). So check these two conditions. The == operation can be done by using ! and ^, because !(A^B) is equivalent to A == B
+
+3. twocom2SignedVal
+The sign bit is saved in mask.
+
+(i) if x is positive, mask = 0, so x + mask = x, and x ^ mask = x
+(ii) if x is negative, mask is 0xFFFFFFFF, meaning -1, so x + mask = x - 1, and (x-1) ^ mask will be inverse of (x-1). So the result is inverse of (x-1), which is equivalent to the absolute value of x (two's complement in reverse)
+
+In both cases, the sign bit with added back with (mask << 31), making it signed-magnitude.
+
+4. nibbleReverse
+There are 8 nibbles in a 32-bit integer. Denote them as nibble 8 to 1 from right to left (87654321). We want to return (12345678). Shift operations are done to make 0x0F0F0F0F, 0x00FF00FF and 0x0000FFFF.
+
+(i) x = (0x0F0F0F0F & (x >> 4)) | ((0x0F0F0F0F & x) << 4)
+This will move the odd-numbered nibbles to the even-numbered positions, and even-numbered nibbles to the odd-numbered positions. This exchanges adjacent nibbles. Now every pair of nibbles is reversed. (78, 56, 34, 12)
+
+(ii) x = (0x00FF00FF & (x >> 8)) | ((0x00FF00FF & x) << 8);
+This exchanges adjacent nibble pairs. Now this will look like: (5678, 1234). Now every 4-pair of nibbles is reversed.
+
+(iii) return (0x0000FFFF & (x >> 16)) | (x << 16)
+This exchanges the 2 4-pairs of nibbles. Now we have (12345678). This is the desired result.
+
+5. bitFilter
+The idea is to make 'highMask' have 1's starting from LSB to the 'highbit', and 0 in the upper bits, and make 'lowMask' have 1's starting from 'lowbit' to, and 0 in the lower bits. Then (highMask & lowMask) will have 1's starting from 'lowbit' to 'highbit', and 0 elsewhere, which is the bit mask that we needed. Now ANDing input and this mask will obtain the desired result. How highMask and lowMask are obtained:
+
+(i) highMask
+First, shift left 1 'highbit' times. Then we have 1 at the 'highbit'.
+
+(1) highMask |= highMask >> 16;
+Every 16-bit chunk is identical.
+(2) highMask |= highMask >> 8;
+Every 8-bit chunk is identical, from the first chunk on the right, up to the chunk containing 1.
+(3) highMask |= highMask >> 4;
+Every 4-bit chunk is identical, from the first chunk on the right, up to the chunk containing 1.
+(4) highMask |= highMask >> 2;
+Every 2-bit chunk is identical, from the first chunk on the right, up to the chunk containing 1.
+(5) highMask |= highMask >> 1;
+Every bit is identical, from the first on the right, up to the chunk containing 1. Now there is 1 from the LSB to the highbit.
+
+(ii) lowMask
+Make 0xFFFFFFFF with shift operations and OR operation. Shifting 0xFFFFFFFF lowbit times will obtain lowMask containing 1's starting from 'lowbit' to MSB, and 0 in the lower bits.
+
+
+6. AddAndDivideBy4
+If the sign of x and y are the same, and the sign of x and x+y are different, there will be overflow. Inequivalence of sign can be checked with XOR. (XYSame & XSumDifferent) will have 1 if there is overflow, and 0 if there isn't. Shifting this left 31 times and shifting it right 31 times will result in 0xFFFFFFFF if there is overflow, and 0x0 if there isn't. So (overflow & x) will be x if there is overflow and 0 if there isn't. And (~overflow & ((sum+mask) >> 2)) will be 0 if there is overflow and sum divided by 4 if there isn't. if sum is positive, shifting right twice will divide by 4. However, if sum is negative, shifting right twice will result in the quotient for integers divisible by 4, and (quotient-1) for integers not divisible by 4, because shifting right rounds towards negative infinity, while division rounds towards 0. To obtain the same result as division, add 3 first and then shift right twice. Integers divisible by 4 will still become the correct quotient, and integers not divisible by 4 (one of three cases: 4*(quotient)-1, 4*(quotient)-2, 4*(quotient)-3) will be one of (4*(quotient)+2, 4*(quotient)+1, 4*(quotient)) and shifting right twice will result in quotient.
+
+So (overflow & x) | (~overflow & ((sum+mask) >> 2)) returns the desired result.
+
+
+7. numZerosFirst
+First, make 0x55555555, 0x33333333, 0x0F0F0F0F and 0x0F000000 using shift operations and addition.
+
+And as explained in 4. bitFilter, shifting an integer right 16, 8, 4, 2, 1 times consecutively and adding it to the integer each time can copy '1' from the highest bit to all the lower bits. So do this to x. Then we have all the 'first zeros' as 0, and all the lower bits as 1. And then inverse all bits of x. Then we have all the 'first zeros' as 1, and all the lower bits as 0. Count the number of 1's and we will have counted the number of 'first zeros'.
+
+Counting the 1's:
+(i)  x = x - ((x >> 1) & 0x55555555);
+This makes every pair of bits contain the actual number of 1's that were in that pair of bits. If the pair of bit was:
+(1) 11
+11 - 01 = 10 denotes 2, the number of 1's in 11
+
+(2) 10
+10 - 01 = 01 denotes 1, the number of 1's in 10
+
+(3) 01
+01 - 00 = 01 denotes 1, the number of 1's in 01
+
+(4) 00
+00 - 00 = 00 denotes 0, the number of 1's in 00
+
+(ii) x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+This adds adjacent pair of bits, meaning every 4 bits will contain the actual number of 1's that were in those 4 bits.
+
+(iii) ((x + (x >> 4)) & 0x0F0F0F0F);
+This adds adjacent 4-pair of bits, meaning every 8 bits will contain the actual number of 1's that were in those 8 bits.
+
+(iv)
+    x = x + ((x << 8) & shift24Mask);
+    x = x + ((x << 16) & shift24Mask);
+    x = x + ((x << 24) & shift24Mask);
+
+Now these 3 lines will add lower 3 8-bit chunks to the highest 8-bit chunk. Now the highest 8-bit chunk (bit 24 through 31) will contain the number of 1's. Because the number of 1's will be at maximum 32, meaning only the upper 6 bits can be 1, meaning the MSB will be 0 always. So by shifting x right 24 times, we obtain the number of 1's, the desired result.
+
+
+8. absFloat
+Extract exponent and fraction bits using 0x7F800000 and 0x007FFFFF. NaN can be checked by checking if exponent is all 1's (0x7F800000) and fraction is non-zero. And the absolute value can be returned by uf & 0x7FFFFFFF, because the MSB will always be 0, meaning positive value.
+
+9. castFloat2Int
+First, extract sign, exponent and fraction bits.
+If uf < 1 (exponent < 127), return 0, if uf is out of range (exponent >=158), return 0x80000000u.
+If it isn't the above case, add 1 to the bit 23 of fraction. Now this can be seen as representing (1 + fraction). Now we want to calculate (1 + fraction) * 2^(exponent - 127), and shifting right 23 times to only leave the integer part. Since multiplying 2^(exponent - 127) is also a shift operation, this can be done by shifting left (exponent-150) times when (exponent> 150), and shifting right (150-exponent) times otherwise. If the sign bit was 1, inverse the result using two's complement. Now we have the desired result.
+
+10. compareFloat
+First, extract sign, exponent and fraction bits of each integer.
+(i) Similar to 9. castFloat2Int, check if either integer is NaN, and return 0 if it is.
+(ii) If exponents and fractions of both integers are all 0, this means they are zeros, in which case they are equal regardless of their representation and 0 should be returned. 
+(iii) If the signs of the two integers are different, the positive integer will be larger. So returning sign bit of f (1 if f is negative / f < g, and 0 if f is positive / f > g) will return the desired result.
+(iv) Otherwise, if they are positive, return f < g. If they are negative, the one with the greater absolute value will be larger, so return f > g.
