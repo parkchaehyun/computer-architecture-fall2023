@@ -1,0 +1,49 @@
+PA3 Write-up
+
+Problem 1 
+
+The instruction after the branch instruction will be fetched by default (static branch prediction, predicting branch will not be taken). If the branch is not taken the instructions will continue. If the branch is taken, the instruction after the branch instruction will be flushed and there will be 1-cycle stall, and the next instruction will be the one that the branch instruction was pointing to.
+
+The ‘branch_taken’ flag will be raised if the instruction is BEQ and if the two register values are equal. (Checked in the ID stage because of problem 3). When ‘branch_taken’ is raised, ‘stall’ is raised, and this flag enables two things:
+
+(1) flush the mispredicted instruction
+‘stall’ is given as input to the instruction decoder. When the instruction decoder receives a high ‘stall’, it will set all control values to 0, effectively flushing the next instruction that would’ve been executed if the branch was not taken.
+
+(2) stall for one cycle
+If ‘branch_taken’ is high, the destination address (Given by current pc value + immediate value * 2) is assigned to the next pc value (instead of adding 4 to the existing value and moving to the next instruction).  Because of the flushing in (1), ‘branch_taken’ and ‘stall’ will be low after one cycle.  (Instruction is NOP, meaning it is not BEQ) So after one cylcle of stall, the instruction that the branch instruction was pointing to is executed.
+
+Problem 2
+
+(1) stalling when load-use hazard is encountered
+It is detected by the flag ‘lu_hazard’, which checks if the destination register in ID stage matches either of the source registers in IF stage. If the flag is raised, similar to branch taken, the instruction after the load instruction is flushed by the instruction decoder. And the next pc value will be assigned the same value as the current pc value, meaning the instruction after the load instruction will be executed again after 1 cycle of stall.
+
+(2) forwarding
+The source register values in the EX stage is assigned either the corresponding values in the ID stage, or the forwarded values from EX and MEM stages. The forwarding conditions are:
+
+(i) Assigned the EX stage value
+If the EX stage instruction writes to a register which isn’t x0, and that register is used as source in the next instruction (currently in ID) and that instruction isn’t BEQ
+
+(ii) Assigned the MEM stage value
+If  the MEM stage instruction writes to a register which isn’t x0, and that register is used as source in the next instruction (currently in ID) and that instruction isn’t BEQ. And depending on whether the MEM stage nstruction is load or not, use the memory read data or the ALU result data.
+
+If both (i) and (ii) are satisfied, (i) has priority, so that the latest value is assigned.(solving double data hazard)
+
+Problem 3
+
+(1) forwarding
+In order to determine if branches are taken in the ID stage, the source register values now should be forwarded to the ID stage when necessary. Unlike EX stage values (register) ID stage values are assigned instantly (wire), so in order to forward previous EX and MEM stage values to the current ID stage value, use the next stage values (MEM and WB). Similar to forwarding in problem 2:
+
+(i) Assigned the MEM stage value
+If the MEM stage instruction writes to a register which isn’t x0, and that register is used as source in the next instruction (currently in ID) and that instruction is BEQ.
+
+(ii) Assigned the WB stage value
+If the WB stage instruction writes to a register which isn’t x0, and that register is used as source in the next instruction (currently in ID) and that instruction is BEQ. And depending on whether the WB stage instruction is load or not, use the memory read data or the ALU result data.
+
+If both (i) and (ii) are satisfied, (i) has priority, so that the latest value is assigned.(solving double data hazard) If no forwarding conditions are satisfied, use the register read data.
+
+(2) stall
+(i) 1-cycle stall
+Is needed when any of previous or second previous instruction’s destination registers (ID and EX stage) is equal to either source register in the current BEQ instruction (in IF stage). The ‘beq_stall’ flag is raised according to this condition, and when it is raised the next ID instruction is flushed, 1 cycle is stalled (similar to problem 1), and the BEQ instruction is fetched again, when the correct values can be forwarded.
+
+(ii) 2-cycle stall
+Is needed when the previous instruction is load, and its destination register is equal to either source register in the current BEQ instruction. This can be checked by checking if ‘lu_hazard’ flag is raised and the opcode of the current instruction (in IF stage) is a BEQ instruction. When these two conditions are true, set ‘beq_after_load’ to 1. If ‘beq_after_load’ is 1, the cycle will be stalled (same as other flags) and it will be set to 0. This means that when the ‘lu_hazard’ flag is raised and the current instruction is a BEQ instruction, the instruction is stalled for 1 cycle and the ‘beq_after_load’ is raised. And in the next cycle, the instruction is stalled again because of ‘beq_after_load’. Only in the cycle after that, the ‘beq_after_load’ is 0 and the BEQ instruction will execute. So the instruction is stalled for 2 cycles and the correct value can be forwarded from the load instruction for comparison.
