@@ -1,0 +1,30 @@
+PA5 Write-up
+
+Sum inputA[i][k] and inputB[k][j] to obtain output[i][j].
+
+1. Blocking
+I have set 'BLOCKSIZE' to 64. Instead of just 3 for loops for i, k, j, have 6 for loops for i, k, j, ii, kk, jj. ii, kk, jj are dependent on i, k, j, respectively, because each ii, kk, jj will start at value of i, k, j and will be incremented up to (i or k or j) + BLOCKSIZE. And i, j, k will be incremented by BLOCKSIZE. By this, every element will be accounted for, but in a more efficient order by maximizing data accesses before they are overwritten and minimizing load of memory.
+
+2. SIMD (SSE2)
+Use SSE2 intrinsics to do 4 multiplication of 32-bit data at once, using 128-bit wide registers. My implementation does A[i][k]*B[k][j], A[i][k]*B[k][j+1], A[i][k]*B[k][j+2], A[i][k]*B[k][j+3] at the same time and add them to the current values of output[i][j], output[i][j+1], output[i][j+2], output[i][j+3] respectively, also at the same time.
+
+int value = inputA[ii * K + kk];
+__m128i a = _mm_set1_epi32(value);
+-> _mm_set1_epi32 will load value into all 4 registers, in this case A[i][k].
+
+__m128i b = _mm_loadu_si128((const __m128i*)(inputB + kk * N + jj));
+-> _mm_loadu_si128 loads 128 bits starting from B[k][j], which will store B[k][j], B[k][j+1], B[k][j+2], B[k][j+3] at each 32-bit register.
+
+__m128i tmp1 = _mm_mul_epu32(a,b);
+__m128i tmp2 = _mm_mul_epu32( _mm_srli_si128(a,4), _mm_srli_si128(b,4));
+__m128i product = _mm_unpacklo_epi32(_mm_shuffle_epi32(tmp1, _MM_SHUFFLE (3,1,2,0)), _mm_shuffle_epi32(tmp2, _MM_SHUFFLE (3,1,2,0)));
+-> this will multiply each 32-bit register in a and b. So each 32-bit register will contain A[i][k]*B[k][j], A[i][k]*B[k][j+1], A[i][k]*B[k][j+2], A[i][k]*B[k][j+3] respectively.
+
+*explanation:
+denote 32-bit registers in a and b from MSB to LSB as [a3, a2, a1, a0] and [b3, b2, b1, b0] respectively.
+_mm_mul_epu32(a,b) will store a2*b2 in c2 and a0*b0 in c0 of tmp1.
+ _mm_srli_si128(a,4) shifts a by 4 bytes (32 bits). so tmp2 will have a3*b3 and a1*b1. Now, _mm_shuffle_epi32(tmp1, _MM_SHUFFLE ()) will shuffle the order of c3, c2, c1, c0 as given by the operand of _MM_SHUFFLE. _mm_shuffle_epi32(tmp1, _MM_SHUFFLE (3, 1, 2, 0)) will shuffle [c3, c2, c1, c0] to [c3, c1, c2, c0], so it will have a2*b2 and a0*b0 in lower 64 bits. Similarly, _mm_shuffle_epi32(tmp2, _MM_SHUFFLE (3, 1, 2, 0)) returns a3*b3 and a1*b1 in lower 64 bits. _mm_unpacklo_epi32([x3, x2, x1, x0], [y3, y2, y1, y0]) unpacks and interleaves lower 64 bits, returning [y1, x1, y0, x0]. So _mm_unpacklo_epi32(_mm_shuffle_epi32(tmp1, _MM_SHUFFLE (0, 0, 2, 0)), _mm_shuffle_epi32(tmp2, _MM_SHUFFLE (0, 0, 2, 0))) will return [a3*b3, a2*b2, a1*b1, a0*b0], the desired result.
+
+__m128i current = _mm_loadu_si128((__m128i*)(output + ii * N + jj));
+_mm_storeu_si128((__m128i*)(output + ii * N + jj), _mm_add_epi32(product, current));
+-> _mm_loadu_si128 will load the current value of output[i][j], output[i][j+1], output[i][j+2], output[i][j+3] (32*4=128bits). passing this and the product to _mm_add_epi32 will add each 32-bit registers of the two values. Store the result back to output[I][j].ss
