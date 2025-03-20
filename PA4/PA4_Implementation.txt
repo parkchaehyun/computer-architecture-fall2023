@@ -1,0 +1,27 @@
+PA4 Write-up
+
+From the address, set_index, tag, set_index_l2, and tag_l2 are computed by shifting and AND operation.
+
+(1) L1 Hit
+LRU value is assigned and LRU counter is incremented. If it is a write operation, the dirty flag is raised.
+
+(2) L1 Miss
+Check if there is an empty block in L1. Traverse through the array in the increasing order of index, and find the first empty block's index. If there is no empty block, evict a block and use the index of the evicted block. The block at the index is assigned the tag value and its valid flag is raised. The dirty flag of the block will be set depending on the current instruction (read or write). LRU value is assigned, and LRU counter and fifo value is incremented. 
+
+* L1 Eviction: If there isn’t an empty block, choose a block to evict according to the policy. If the evicted block is dirty, write back to L2. This is done by finding the corresponding block in L2 (using the tag value), and marking that block as dirty. LRU counter of that block is incremented as well. 
+
+(2-1) L2 hit
+LRU value is assigned and LRU counter is incremented.
+
+(2-2) L2 Miss
+Check if there is an empty block in L2. Traverse through the array in the increasing order of index, and find the first empty block's index. If there is no empty block, evict a block and use the index of the evicted block. (If the evicted block existed in L1, invalidate this block. If the block in L1 is dirty, write back to memory.) The block at the index is assigned the tag value and its valid flag is raised. 
+The dirty flag of the block will be set depending on the current instruction (read or write). LRU value is assigned and LRU counter and fifo value is incremented.
+
+* L2 Eviction: If there isn’t an empty block, choose a block to evict according to the policy. If the evicted block is dirty, write back to memory. The dirty flag of the evicted block is set to 0. Now, check if the evicted block in L2 exists in L1. If it does, set the valid flag of that block to 0. (Inclusive cache)
+
+Eviction policy: adopt one of two policies depending on the value of ‘cachePolicy’
+(i) LRU (cachePolicy == 0)
+- LRU counters (lru_counter and l2_lru_counter) are initially 0. Whenever a block is accessed, its LRU value is assigned the current value of the counter and the counter is incremented by 1 afterwards. And when a set is full and a block has to be evicted, a block with the least LRU value is chosen, since it is the oldest accessed block.
+(ii) FIFO (cachePolicy == 1)
+- Blocks are initially filled from indices 0 to s-1. This means the 0-block is inserted first, and s-1 block is inserted last. l1_fifo and l2_fifo arrays denote the index of oldest inserted block, and they are initialized to 0. When a block has to be evicted in set k, the block with index value of the k-th entry in the fifo array will be evicted. And the entry in the fifo array will be incremented by 1, and it will again store the index of the oldest inserted block. If the fifo value becomes E (or E2) after incrementing, it is set to 0 to correctly reflect the index.
+
